@@ -38,6 +38,7 @@ class MultiAccountBot:
         self.accounts_db = 'accounts.db'
         self.reports_db = 'reports.db'
         self.active_clients = {}
+        self.client = None  # ✅ Add client reference
         self.init_dbs()
     
     async def init_dbs(self):
@@ -180,7 +181,7 @@ class MultiAccountBot:
         except:
             return None, f"⚠️ **@{parsed['target']}** not found"
         
-        # Save report
+        # Save report ✅ FIXED
         async with aiosqlite.connect(self.reports_db) as db:
             me = await client.get_me()
             await db.execute('''
@@ -193,8 +194,10 @@ class MultiAccountBot:
                 parsed['category'], parsed['reason'], parsed['severity']
             ))
             await db.commit()
-            cursor = db.execute('SELECT last_insert_rowid()')
-            report_id = (await cursor.fetchone())[0]
+            
+            # ✅ FIX: Correct way to get last insert ID in aiosqlite
+            async with db.execute('SELECT last_insert_rowid()') as cursor:
+                report_id = (await cursor.fetchone())[0]
         
         return report_id, f"✅ **#{report_id}** SAVED (Lv{parsed['severity']})"
     
@@ -232,58 +235,61 @@ class MultiAccountBot:
 # 🔥 Bot instance
 bot = MultiAccountBot()
 
-# 🔥 EVENT HANDLERS
-@events.register(events.NewMessage(pattern=r'/add_account\s+(\w+)\s*(\+?\d{10,15})'))
-async def add_account(event):
-    name = event.pattern_match.group(1)
-    phone = event.pattern_match.group(2)
+# ✅ FIXED: Proper event handler registration
+async def register_handlers(client):
+    """Register all event handlers"""
     
-    await event.reply(f"🔄 **Adding** `{name}`...")
-    success, msg = await bot.add_account(name, phone)
-    await event.edit(msg)
-
-@events.register(events.NewMessage(pattern='/accounts'))
-async def list_accounts(event):
-    text = await bot.list_accounts()
-    await event.reply(text)
-
-@events.register(events.NewMessage(pattern=r'/report_(\w+)\s+(\w+)\s+(.+?)(?:\s+(.+))?'))
-async def report_handler(event):
-    """ /report_user main @target spam """
-    cmd_type = event.pattern_match.group(1)  # user/bot/group/channel
-    account = event.pattern_match.group(2)   # main
-    target = event.pattern_match.group(3)    # @target  
-    reason = event.pattern_match.group(4) or 'spam'
-    
-    await event.reply(f"🔍 **[{account}]** checking `{target}`...")
-    
-    report_id, msg = await bot.report_target(account, cmd_type, target, reason)
-    await event.edit(msg)
-
-@events.register(events.NewMessage(pattern='/stats'))
-async def stats(event):
-    async with aiosqlite.connect(bot.reports_db) as db:
-        async with db.execute('SELECT COUNT(*) FROM reports') as c:
-            total = (await c.fetchone())[0]
+    @client.on(events.NewMessage(pattern=r'/add_account\s+(\w+)\s*(\+?\d{10,15})'))
+    async def add_account(event):
+        name = event.pattern_match.group(1)
+        phone = event.pattern_match.group(2)
         
-        if total == 0:
-            await event.reply("📊 **No reports**")
-            return
-        
-        async with db.execute('''
-            SELECT account_name, COUNT(*), AVG(severity) 
-            FROM reports GROUP BY account_name ORDER BY COUNT(*) DESC
-        ''') as c:
-            rows = await c.fetchall()
-    
-    stats = f"**📊 {total} Reports:**\n\n"
-    for acc, count, avg in rows[:5]:
-        stats += f"• `{acc}`: **{count}** (Ø{avg:.1f})\n"
-    await event.reply(stats)
+        await event.reply(f"🔄 **Adding** `{name}`...")
+        success, msg = await bot.add_account(name, phone)
+        await event.edit(msg)
 
-@events.register(events.NewMessage(pattern='/help'))
-async def help_cmd(event):
-    help_text = """
+    @client.on(events.NewMessage(pattern='/accounts'))
+    async def list_accounts(event):
+        text = await bot.list_accounts()
+        await event.reply(text)
+
+    @client.on(events.NewMessage(pattern=r'/report_(\w+)\s+(\w+)\s+(.+?)(?:\s+(.+))?'))
+    async def report_handler(event):
+        """ /report_user main @target spam """
+        cmd_type = event.pattern_match.group(1)  # user/bot/group/channel
+        account = event.pattern_match.group(2)   # main
+        target = event.pattern_match.group(3)    # @target  
+        reason = event.pattern_match.group(4) or 'spam'
+        
+        await event.reply(f"🔍 **[{account}]** checking `{target}`...")
+        
+        report_id, msg = await bot.report_target(account, cmd_type, target, reason)
+        await event.edit(msg)
+
+    @client.on(events.NewMessage(pattern='/stats'))
+    async def stats(event):
+        async with aiosqlite.connect(bot.reports_db) as db:
+            async with db.execute('SELECT COUNT(*) FROM reports') as c:
+                total = (await c.fetchone())[0]
+            
+            if total == 0:
+                await event.reply("📊 **No reports**")
+                return
+            
+            async with db.execute('''
+                SELECT account_name, COUNT(*), AVG(severity) 
+                FROM reports GROUP BY account_name ORDER BY COUNT(*) DESC
+            ''') as c:
+                rows = await c.fetchall()
+        
+        stats_text = f"**📊 {total} Reports:**\n\n"
+        for acc, count, avg in rows[:5]:
+            stats_text += f"• `{acc}`: **{count}** (Ø{avg:.1f})\n"
+        await event.reply(stats_text)
+
+    @client.on(events.NewMessage(pattern='/help'))
+    async def help_cmd(event):
+        help_text = """
 **🔥 Multi-Account Bot**
 
 **📱 Accounts:**
@@ -301,12 +307,14 @@ async def help_cmd(event):
 1. `/add_account acc1 +919876543210`
 2. Enter code when prompted  
 3. `/report_bot acc1 @target scam`
-    """
-    await event.reply(help_text)
+        """
+        await event.reply(help_text)
 
 async def main():
     client = TelegramClient('bot', API_ID, API_HASH)
     await client.start(bot_token=BOT_TOKEN)
+    bot.client = client  # ✅ Store client reference
+    await register_handlers(client)  # ✅ Register handlers
     print("🚀 Multi-Account Bot LIVE!")
     await client.run_until_disconnected()
 
