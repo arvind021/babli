@@ -38,8 +38,7 @@ class MultiAccountBot:
         self.accounts_db = 'accounts.db'
         self.reports_db = 'reports.db'
         self.active_clients = {}
-        self.client = None  # ✅ Add client reference
-        self.init_dbs()
+        self.client = None
     
     async def init_dbs(self):
         """Initialize all databases"""
@@ -181,7 +180,7 @@ class MultiAccountBot:
         except:
             return None, f"⚠️ **@{parsed['target']}** not found"
         
-        # Save report ✅ FIXED
+        # Save report
         async with aiosqlite.connect(self.reports_db) as db:
             me = await client.get_me()
             await db.execute('''
@@ -195,7 +194,6 @@ class MultiAccountBot:
             ))
             await db.commit()
             
-            # ✅ FIX: Correct way to get last insert ID in aiosqlite
             async with db.execute('SELECT last_insert_rowid()') as cursor:
                 report_id = (await cursor.fetchone())[0]
         
@@ -235,7 +233,7 @@ class MultiAccountBot:
 # 🔥 Bot instance
 bot = MultiAccountBot()
 
-# ✅ FIXED: Proper event handler registration
+# ✅ Proper event handler registration
 async def register_handlers(client):
     """Register all event handlers"""
     
@@ -311,7 +309,10 @@ async def register_handlers(client):
         await event.reply(help_text)
 
 async def main():
-    # ✅ Bot के लिए अलग session name use करो
+    # ✅ पहले databases initialize करो
+    await bot.init_dbs()
+    
+    # फिर bot client बनाओ
     client = TelegramClient('bot_session', API_ID, API_HASH)
     await client.start(bot_token=BOT_TOKEN)
     bot.client = client
