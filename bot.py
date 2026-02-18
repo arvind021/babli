@@ -239,55 +239,68 @@ async def register_handlers(client):
     
     @client.on(events.NewMessage(pattern=r'/add_account\s+(\w+)\s*(\+?\d{10,15})'))
     async def add_account(event):
-        name = event.pattern_match.group(1)
-        phone = event.pattern_match.group(2)
-        
-        await event.reply(f"🔄 **Adding** `{name}`...")
-        success, msg = await bot.add_account(name, phone)
-        await event.edit(msg)
+        try:
+            name = event.pattern_match.group(1)
+            phone = event.pattern_match.group(2)
+            
+            success, msg = await bot.add_account(name, phone)
+            await event.reply(msg)
+        except Exception as e:
+            logger.error(f"Error in add_account: {e}")
+            await event.reply(f"❌ Error: {str(e)}")
 
     @client.on(events.NewMessage(pattern='/accounts'))
     async def list_accounts(event):
-        text = await bot.list_accounts()
-        await event.reply(text)
+        try:
+            text = await bot.list_accounts()
+            await event.reply(text)
+        except Exception as e:
+            logger.error(f"Error in list_accounts: {e}")
+            await event.reply(f"❌ Error: {str(e)}")
 
     @client.on(events.NewMessage(pattern=r'/report_(\w+)\s+(\w+)\s+(.+?)(?:\s+(.+))?'))
     async def report_handler(event):
-        """ /report_user main @target spam """
-        cmd_type = event.pattern_match.group(1)  # user/bot/group/channel
-        account = event.pattern_match.group(2)   # main
-        target = event.pattern_match.group(3)    # @target  
-        reason = event.pattern_match.group(4) or 'spam'
-        
-        await event.reply(f"🔍 **[{account}]** checking `{target}`...")
-        
-        report_id, msg = await bot.report_target(account, cmd_type, target, reason)
-        await event.edit(msg)
+        try:
+            cmd_type = event.pattern_match.group(1)
+            account = event.pattern_match.group(2)
+            target = event.pattern_match.group(3)
+            reason = event.pattern_match.group(4) or 'spam'
+            
+            report_id, msg = await bot.report_target(account, cmd_type, target, reason)
+            await event.reply(msg)
+        except Exception as e:
+            logger.error(f"Error in report_handler: {e}")
+            await event.reply(f"❌ Error: {str(e)}")
 
     @client.on(events.NewMessage(pattern='/stats'))
     async def stats(event):
-        async with aiosqlite.connect(bot.reports_db) as db:
-            async with db.execute('SELECT COUNT(*) FROM reports') as c:
-                total = (await c.fetchone())[0]
+        try:
+            async with aiosqlite.connect(bot.reports_db) as db:
+                async with db.execute('SELECT COUNT(*) FROM reports') as c:
+                    total = (await c.fetchone())[0]
+                
+                if total == 0:
+                    await event.reply("📊 **No reports**")
+                    return
+                
+                async with db.execute('''
+                    SELECT account_name, COUNT(*), AVG(severity) 
+                    FROM reports GROUP BY account_name ORDER BY COUNT(*) DESC
+                ''') as c:
+                    rows = await c.fetchall()
             
-            if total == 0:
-                await event.reply("📊 **No reports**")
-                return
-            
-            async with db.execute('''
-                SELECT account_name, COUNT(*), AVG(severity) 
-                FROM reports GROUP BY account_name ORDER BY COUNT(*) DESC
-            ''') as c:
-                rows = await c.fetchall()
-        
-        stats_text = f"**📊 {total} Reports:**\n\n"
-        for acc, count, avg in rows[:5]:
-            stats_text += f"• `{acc}`: **{count}** (Ø{avg:.1f})\n"
-        await event.reply(stats_text)
+            stats_text = f"**📊 {total} Reports:**\n\n"
+            for acc, count, avg in rows[:5]:
+                stats_text += f"• `{acc}`: **{count}** (Ø{avg:.1f})\n"
+            await event.reply(stats_text)
+        except Exception as e:
+            logger.error(f"Error in stats: {e}")
+            await event.reply(f"❌ Error: {str(e)}")
 
     @client.on(events.NewMessage(pattern='/help'))
     async def help_cmd(event):
-        help_text = """
+        try:
+            help_text = """
 **🔥 Multi-Account Bot**
 
 **📱 Accounts:**
@@ -305,8 +318,11 @@ async def register_handlers(client):
 1. `/add_account acc1 +919876543210`
 2. Enter code when prompted  
 3. `/report_bot acc1 @target scam`
-        """
-        await event.reply(help_text)
+            """
+            await event.reply(help_text)
+        except Exception as e:
+            logger.error(f"Error in help_cmd: {e}")
+            await event.reply(f"❌ Error: {str(e)}")
 
 async def main():
     # ✅ पहले databases initialize करो
