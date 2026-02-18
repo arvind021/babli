@@ -311,10 +311,11 @@ async def register_handlers(client):
         await event.reply(help_text)
 
 async def main():
-    client = TelegramClient('bot', API_ID, API_HASH)
+    # ✅ Bot के लिए अलग session name use करो
+    client = TelegramClient('bot_session', API_ID, API_HASH)
     await client.start(bot_token=BOT_TOKEN)
-    bot.client = client  # ✅ Store client reference
-    await register_handlers(client)  # ✅ Register handlers
+    bot.client = client
+    await register_handlers(client)
     print("🚀 Multi-Account Bot LIVE!")
     await client.run_until_disconnected()
 
