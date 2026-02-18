@@ -20,9 +20,9 @@ from telethon.errors import (
 )
 
 # 🔥 CONFIG - Edit these
-API_ID = 12345678  # Your API ID
-API_HASH = "your_api_hash"  # Your API Hash
-BOT_TOKEN = "123456:ABC-DEF1234"  # Bot token
+API_ID = 36407155  # Your API ID
+API_HASH = "fb803f15ead1178e63897d77148b7bef"  # Your API Hash
+BOT_TOKEN = "8597378639:AAEaJR6kJQwLvM4sivL2XxreTNi8YLHhOHQ"  # Bot token
 
 # Categories
 REPORT_CATEGORIES = {
